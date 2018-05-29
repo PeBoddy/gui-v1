@@ -3,16 +3,16 @@
     "tasks": [
         {
             "label": "debug",
-     "type": "shell",
-            "command": "",
-            "args": ["g++","-g", "${relativeFile}", "-o","a.exe"]
+            "type": "shell",
+            "command": "g++",
+            "args": ["-g", "${relativeFile}", "-o","a.exe"]
         },
         {
             "label": "Compile and run",
             "type": "shell",
-            "command": "",
+            "command": "g++",
             "args": [
-                "g++","-g", "${relativeFile}", "-o","${fileBasenameNoExtension}.exe", "&&" , "${fileBasenameNoExtension}.exe"
+                "-g", "${relativeFile}", "-o","${fileBasenameNoExtension}.exe",
             ],
             "group": {
                 "kind": "build",
