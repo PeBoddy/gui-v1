@@ -5,22 +5,34 @@
             "label": "debug",
             "type": "shell",
             "command": "g++",
-            "args": ["-g", "${relativeFile}", "-o","a.exe"]
+            "args": [
+                "-g",
+                "${relativeFile}",
+                "-o",
+                "a.exe"
+            ]
         },
         {
-            "label": "Compile and run",
+            "label": "Build",
             "type": "shell",
             "command": "g++",
             "args": [
-                "-g", "${relativeFile}", "-o","${fileBasenameNoExtension}.exe",
+                "-g",
+                "${relativeFile}",
+                "-o",
+                "${fileBasenameNoExtension}.exe",
+                "-lgdiplus",
             ],
             "group": {
                 "kind": "build",
-                "isDefault": true  
+                "isDefault": true
             },
             "problemMatcher": {
                 "owner": "cpp",
-                "fileLocation": ["relative", "${workspaceRoot}"],
+                "fileLocation": [
+                    "relative",
+                    "${workspaceRoot}"
+                ],
                 "pattern": {
                     "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
                     "file": 1,

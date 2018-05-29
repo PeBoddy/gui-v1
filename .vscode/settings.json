@@ -3,6 +3,8 @@
     "files.associations": {
         "iostream": "cpp",
         "sstream": "cpp",
-        "iosfwd": "cpp"
+        "iosfwd": "cpp",
+        "system_error": "cpp",
+        "type_traits": "cpp"
     }
 }

@@ -2,11 +2,16 @@
 #include <Windowsx.h>
 #include <iostream>
 #include <sstream>
+#include <objidl.h>
+#include <gdiplus.h>
+#pragma comment(lib, "Gdiplus.lib")
+using namespace Gdiplus;
 
 using namespace std;
 
-HINSTANCE Instanz;
-LRESULT CALLBACK Fensterfunktion(HWND, UINT, WPARAM, LPARAM);
+HINSTANCE instance;
+LRESULT CALLBACK windowCallback(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK dialogCallback(HWND, UINT, WPARAM, LPARAM);
 
 #define UP_BUTTON 1
 #define DOWN_BUTTON 2
@@ -18,6 +23,7 @@ LRESULT CALLBACK Fensterfunktion(HWND, UINT, WPARAM, LPARAM);
  */
 #define FIBO_MAX 47
 
+// Layout definitions
 #define LABEL_W 50
 #define BASE_H 20
 #define MARGIN 10
@@ -26,42 +32,52 @@ LRESULT CALLBACK Fensterfunktion(HWND, UINT, WPARAM, LPARAM);
 #define BUTTON_H 30
 #define INPUT_W 100
 
+#define MAIN_WINDOW_W 800
+#define MAIN_WINDOW_H 600
+
 // Prototypes
-void AddMenu(HWND);
-void AddControls(HWND);
+void addMenu(HWND);
+void addControls(HWND);
 void createDialog(HINSTANCE);
 void displayDialog(HWND);
+void OnPaint(Graphics&);
 unsigned int fibVoni(int);
 
 // Window-Handler
 HMENU hMenu;
-HWND hDialog, hintIOut, hFIOut;
+HWND hDialog;
+HWND hIndexOut;
+HWND hValueOut;
+HWND hMainWindow;
 
 // Variables
 int i = 0;
 int output = 0;
-stringstream ss;
-string str;
 
 unsigned int *cache;
 
 //-----------------Windows - Hauptprogramm ------------------------------------
-int WINAPI WinMain(HINSTANCE dieseInstanz,
-                   HINSTANCE vorherigeInstanz,
+int WINAPI WinMain(HINSTANCE thisInstance,
+                   HINSTANCE previousInstance,
                    LPSTR lpszArgument,
-                   int FensterStil)
+                   int windowStyle)
 {
-    MSG Meldung;
-    HWND Hauptfenster;
-    Instanz = dieseInstanz;
-    if (!vorherigeInstanz)
+    MSG message;
+    instance = thisInstance;
+
+    GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken;
+
+    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+    if (!previousInstance)
     {
         WNDCLASSEX wincl;
         wincl.style = 0;
-        wincl.lpfnWndProc = Fensterfunktion;
+        wincl.lpfnWndProc = windowCallback;
         wincl.cbClsExtra = 0;
         wincl.cbWndExtra = 0;
-        wincl.hInstance = dieseInstanz;
+        wincl.hInstance = thisInstance;
         wincl.hIcon = 0;
         wincl.hIconSm = 0;
         wincl.hCursor = LoadCursor(NULL, IDC_ARROW);
@@ -74,61 +90,93 @@ int WINAPI WinMain(HINSTANCE dieseInstanz,
         {
             return 255;
         }
-        createDialog(dieseInstanz);
+
+        createDialog(thisInstance);
     }
 
     cache = (unsigned int *)calloc(sizeof(unsigned int), FIBO_MAX - 3);
 
-    Hauptfenster = CreateWindowEx(0, "Einfach", "Fibonacci-Zahlen", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 800, 500, NULL, NULL, dieseInstanz, NULL);
+    // http://www.directxtutorial.com/Lesson.aspx?lessonid=11-1-4
+    RECT rect = {0, 0, MAIN_WINDOW_W, MAIN_WINDOW_H};
+    bool adjusted = AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, TRUE);
 
-    if (!Hauptfenster)
+    hMainWindow = CreateWindowEx(
+        0,
+        "Einfach",
+        "Fibonacci-Zahlen",
+        WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT,
+        CW_USEDEFAULT,
+        rect.right - rect.left, // WIDTH
+        rect.bottom - rect.top, // HEIGHT
+        NULL,
+        NULL,
+        thisInstance,
+        NULL);
+
+    if (!hMainWindow)
         return 255;
-    ShowWindow(Hauptfenster, FensterStil);
-    while (GetMessage(&Meldung, NULL, 0, 0))
-        DispatchMessage(&Meldung);
-    return Meldung.wParam;
+
+    ShowWindow(hMainWindow, windowStyle);
+
+    while (GetMessage(&message, NULL, 0, 0))
+        DispatchMessage(&message);
+
+    GdiplusShutdown(gdiplusToken);
+
+    return message.wParam;
 } // Ende WinMain
 
-//-----------------Callback Funktion des Hauptfensters ------------------------
-LRESULT CALLBACK Fensterfunktion(HWND Fenster, UINT nachricht, WPARAM wParam,
-                                 LPARAM lParam)
+//-----------------Callback Funktion des hMainWindows ------------------------
+LRESULT CALLBACK windowCallback(HWND window, UINT messageCode, WPARAM wParam,
+                                LPARAM lParam)
 {
-    switch (nachricht)
+    HDC hdc;
+    PAINTSTRUCT ps;
+
+    switch (messageCode)
     {
     case WM_COMMAND:
         switch (wParam)
         {
         case 1:
-            displayDialog(Fenster);
+            displayDialog(window);
             break;
         }
     case WM_CREATE:
-        AddMenu(Fenster);
+        addMenu(window);
         break;
     case WM_DESTROY:
         PostQuitMessage(0);
         break;
+    case WM_PAINT:
+        if (window == hMainWindow)
+        {
+            hdc = BeginPaint(window, &ps);
+            FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_BACKGROUND));
+            Graphics graphics(hdc);
+            OnPaint(graphics);
+            EndPaint(window, &ps);
+        }
     default:
-        return DefWindowProc(Fenster, nachricht, wParam, lParam);
+        return DefWindowProc(window, messageCode, wParam, lParam);
     }
+
     return 0;
 }
 
 //-----------------Callback Funktion des Dialogs ------------------------
-LRESULT CALLBACK DialogFunktion(HWND dialogFenster, UINT nachricht, WPARAM wParam,
-                                LPARAM lParam)
+LRESULT CALLBACK dialogCallback(HWND dialog, UINT messageCode, WPARAM wParam, LPARAM lParam)
 {
-    switch (nachricht)
+    switch (messageCode)
     {
     case WM_CLOSE:
-        DestroyWindow(dialogFenster);
+        DestroyWindow(dialog);
         break;
     case WM_COMMAND:
         if (wParam == UP_BUTTON || wParam == DOWN_BUTTON)
         {
             output = fibVoni(i);
-
-            cout << i << ": " << output << endl;
 
             switch (wParam)
             {
@@ -149,35 +197,37 @@ LRESULT CALLBACK DialogFunktion(HWND dialogFenster, UINT nachricht, WPARAM wPara
             char stringIndex[3];
             sprintf(stringIndex, "%d", i);
             Edit_SetText(
-                hintIOut,
+                hIndexOut,
                 stringIndex);
 
             char stringValue[20];
             sprintf(stringValue, "%d", output);
             Edit_SetText(
-                hFIOut,
+                hValueOut,
                 stringValue);
+
+            RedrawWindow(hMainWindow, NULL, NULL, RDW_INTERNALPAINT);
         }
     default:
-        return DefWindowProcW(dialogFenster, nachricht, wParam, lParam);
+        return DefWindowProcW(dialog, messageCode, wParam, lParam);
     }
 }
 
 // Add Menübar
-void AddMenu(HWND Fenster)
+void addMenu(HWND window)
 {
     hMenu = CreateMenu();
 
     AppendMenu(hMenu, MF_STRING, 1, "Open Dialog");
-    SetMenu(Fenster, hMenu);
+    SetMenu(window, hMenu);
 }
 
 // Create Dialog
-void createDialog(HINSTANCE dieseInstanz)
+void createDialog(HINSTANCE thisInstance)
 {
     WNDCLASSW dialog = {0};
-    dialog.lpfnWndProc = DialogFunktion;
-    dialog.hInstance = dieseInstanz;
+    dialog.lpfnWndProc = dialogCallback;
+    dialog.hInstance = thisInstance;
     dialog.hCursor = LoadCursor(NULL, IDC_ARROW);
     dialog.hbrBackground = (HBRUSH)COLOR_BACKGROUND;
     dialog.lpszClassName = L"DialogClass";
@@ -186,20 +236,14 @@ void createDialog(HINSTANCE dieseInstanz)
 }
 
 // Display Dialog
-void displayDialog(HWND dialogFenster)
+void displayDialog(HWND dialog)
 {
     // http://www.directxtutorial.com/Lesson.aspx?lessonid=11-1-4
-
     int dialogWidth = (int)(WINDOW_PADDING + LABEL_W + MARGIN + INPUT_W + WINDOW_PADDING);
     int dialogHeight = (int)(WINDOW_PADDING + BASE_H + MARGIN + BASE_H + MARGIN + BUTTON_H + WINDOW_PADDING);
 
     RECT rect = {0, 0, dialogWidth, dialogHeight};
-
-    // cout << "not adjusted: " << rect.left << " " << rect.top << " " << rect.right << " " << rect.bottom << endl;
-
     bool adjusted = AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
-
-    // cout << "adjusted: " << adjusted << " " << rect.left << " " << rect.top << " " << rect.right << " " << rect.bottom << endl;
 
     hDialog = CreateWindowW(
         L"DialogClass",
@@ -209,16 +253,16 @@ void displayDialog(HWND dialogFenster)
         200,                    // Y
         rect.right - rect.left, // WIDTH
         rect.bottom - rect.top, // HEIGHT
-        dialogFenster,
+        dialog,
         NULL,
         NULL,
         NULL);
 
-    AddControls(hDialog);
+    addControls(hDialog);
 }
 
 // Labels
-void AddControls(HWND dialogFenster)
+void addControls(HWND dialog)
 {
     // Header
     CreateWindowW(
@@ -229,7 +273,7 @@ void AddControls(HWND dialogFenster)
         WINDOW_PADDING, // Y
         LABEL_W,        // WIDTH
         BASE_H,         // HEIGHT
-        dialogFenster,
+        dialog,
         NULL,
         NULL,
         NULL);
@@ -242,13 +286,13 @@ void AddControls(HWND dialogFenster)
         WINDOW_PADDING + BASE_H + MARGIN, // Y
         LABEL_W,                          // WIDTH
         BASE_H,                           // HEIGHT
-        dialogFenster,
+        dialog,
         NULL,
         NULL,
         NULL);
 
     // Output
-    hintIOut = CreateWindowW(
+    hIndexOut = CreateWindowW(
         L"edit",
         L"",
         WS_VISIBLE | WS_CHILD,
@@ -256,12 +300,12 @@ void AddControls(HWND dialogFenster)
         WINDOW_PADDING,                    // Y
         INPUT_W,                           // WIDTH
         BASE_H,                            // HEIGHT
-        dialogFenster,
+        dialog,
         NULL,
         NULL,
         NULL);
 
-    hFIOut = CreateWindowW(
+    hValueOut = CreateWindowW(
         L"edit",
         L"",
         WS_VISIBLE | WS_CHILD,
@@ -269,7 +313,7 @@ void AddControls(HWND dialogFenster)
         WINDOW_PADDING + BASE_H + MARGIN,  // Y
         INPUT_W,                           // WIDTH
         BASE_H,                            // HEIGHT
-        dialogFenster,
+        dialog,
         NULL,
         NULL,
         NULL);
@@ -283,7 +327,7 @@ void AddControls(HWND dialogFenster)
         WINDOW_PADDING + (2 * (MARGIN + BASE_H)), // Y
         BUTTON_W,                                 // WIDTH
         BUTTON_H,                                 // HEIGHT
-        dialogFenster,
+        dialog,
         (HMENU)DOWN_BUTTON,
         NULL,
         NULL);
@@ -296,7 +340,7 @@ void AddControls(HWND dialogFenster)
         WINDOW_PADDING + (2 * (MARGIN + BASE_H)), // Y
         BUTTON_W,                                 // WIDTH
         BUTTON_H,                                 // HEIGHT
-        dialogFenster,
+        dialog,
         (HMENU)UP_BUTTON,
         NULL,
         NULL);
@@ -316,9 +360,9 @@ unsigned int fibVoni(int fib)
         return 1;
     }
 
-    if (fib >= FIBO_MAX)
+    if (fib >= FIBO_MAX - 1)
     {
-        fib = FIBO_MAX;
+        fib = FIBO_MAX - 1;
     }
 
     if (cache[fib] == 0)
@@ -327,4 +371,53 @@ unsigned int fibVoni(int fib)
     }
 
     return cache[fib];
+}
+
+void drawPoint(Brush *brush, Graphics &graphics, int x, int y)
+{
+    cout << "Draw at [" << x << ", " << y << "]" << endl;
+
+    graphics.FillEllipse(brush, x - 2, y - 2, 4, 4);
+}
+
+void OnPaint(Graphics &graphics)
+{
+    // Draw X and Y axis
+
+    Pen pen(Color(255 - (1 * i), 2 * i, 1 * i, 5 * i));
+
+    int coordinatesZeroX = 2 * WINDOW_PADDING;
+    int coordinatesZeroY = MAIN_WINDOW_H - (2 * WINDOW_PADDING);
+
+    graphics.DrawLine(&pen, WINDOW_PADDING, coordinatesZeroY, MAIN_WINDOW_W - WINDOW_PADDING, coordinatesZeroY);
+    graphics.DrawLine(&pen, coordinatesZeroX, MAIN_WINDOW_H - WINDOW_PADDING, coordinatesZeroX, WINDOW_PADDING);
+
+    // Draw Points
+    SolidBrush brush(Color(255, 255, 0, 0));
+
+    for (int j = 0; j < i; j++)
+    {
+        int x = coordinatesZeroX + j;
+        int y = coordinatesZeroY - (j < 3 ? j : cache[j]);
+        int x2 = x + j;
+        int y2;
+
+        if (j > 0 && j < 3)
+        {
+            y2 = y - j;
+        }
+        else if (j > 0)
+        {
+            y2 = cache[j - 1];
+        }
+        else
+        {
+            y2 = y;
+        }
+
+        graphics.DrawLine(&pen, i, i, i, i);
+
+        graphics.DrawLine(&pen, x, y, x2, y2);
+        // drawPoint(&brush, graphics, x, y);
+    }
 }
