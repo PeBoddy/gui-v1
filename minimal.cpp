@@ -40,7 +40,7 @@ void addMenu(HWND);
 void addControls(HWND);
 void createDialog(HINSTANCE);
 void displayDialog(HWND);
-void OnPaint(Graphics&);
+void OnPaint(Graphics &);
 unsigned int fibVoni(int);
 
 // Window-Handler
@@ -53,6 +53,11 @@ HWND hMainWindow;
 // Variables
 int i = 0;
 int output = 0;
+int coordinatesZeroX = 2 * WINDOW_PADDING;
+int coordinatesZeroY = MAIN_WINDOW_H - (2 * WINDOW_PADDING);
+int xLength = MAIN_WINDOW_W - (3 * WINDOW_PADDING);
+int yLength = MAIN_WINDOW_H - (3 * WINDOW_PADDING);
+int xOffset = xLength / FIBO_MAX;
 
 unsigned int *cache;
 
@@ -94,7 +99,7 @@ int WINAPI WinMain(HINSTANCE thisInstance,
         createDialog(thisInstance);
     }
 
-    cache = (unsigned int *)calloc(sizeof(unsigned int), FIBO_MAX - 3);
+    cache = (unsigned int *)calloc(sizeof(unsigned int), FIBO_MAX);
 
     // http://www.directxtutorial.com/Lesson.aspx?lessonid=11-1-4
     RECT rect = {0, 0, MAIN_WINDOW_W, MAIN_WINDOW_H};
@@ -176,8 +181,6 @@ LRESULT CALLBACK dialogCallback(HWND dialog, UINT messageCode, WPARAM wParam, LP
     case WM_COMMAND:
         if (wParam == UP_BUTTON || wParam == DOWN_BUTTON)
         {
-            output = fibVoni(i);
-
             switch (wParam)
             {
             case UP_BUTTON:
@@ -201,12 +204,13 @@ LRESULT CALLBACK dialogCallback(HWND dialog, UINT messageCode, WPARAM wParam, LP
                 stringIndex);
 
             char stringValue[20];
-            sprintf(stringValue, "%d", output);
+            sprintf(stringValue, "%d", fibVoni(i));
             Edit_SetText(
                 hValueOut,
                 stringValue);
 
-            RedrawWindow(hMainWindow, NULL, NULL, RDW_INTERNALPAINT);
+            const RECT rect = {0, 0, MAIN_WINDOW_W, MAIN_WINDOW_H};
+            InvalidateRect(hMainWindow, &rect, true);
         }
     default:
         return DefWindowProcW(dialog, messageCode, wParam, lParam);
@@ -344,6 +348,18 @@ void addControls(HWND dialog)
         (HMENU)UP_BUTTON,
         NULL,
         NULL);
+
+    char stringIndex[3];
+    sprintf(stringIndex, "%d", i);
+    Edit_SetText(
+        hIndexOut,
+        stringIndex);
+
+    char stringValue[20];
+    sprintf(stringValue, "%d", fibVoni(i));
+    Edit_SetText(
+        hValueOut,
+        stringValue);
 }
 
 // FibVoni
@@ -352,12 +368,12 @@ unsigned int fibVoni(int fib)
 
     if (fib <= 0)
     {
-        return 0;
+        cache[fib] = 0;
     }
 
     if (fib < 3)
     {
-        return 1;
+        cache[fib] = 1;
     }
 
     if (fib >= FIBO_MAX - 1)
@@ -373,51 +389,44 @@ unsigned int fibVoni(int fib)
     return cache[fib];
 }
 
-void drawPoint(Brush *brush, Graphics &graphics, int x, int y)
+Status drawPoint(Graphics &graphics, int x, int y)
 {
-    cout << "Draw at [" << x << ", " << y << "]" << endl;
-
-    graphics.FillEllipse(brush, x - 2, y - 2, 4, 4);
+    SolidBrush brush(Color(255, 255, 0, 0));
+    return graphics.FillEllipse(&brush, x - 2, y - 2, 4, 4);
 }
 
 void OnPaint(Graphics &graphics)
 {
     // Draw X and Y axis
-
-    Pen pen(Color(255 - (1 * i), 2 * i, 1 * i, 5 * i));
-
-    int coordinatesZeroX = 2 * WINDOW_PADDING;
-    int coordinatesZeroY = MAIN_WINDOW_H - (2 * WINDOW_PADDING);
+    Pen pen(Color(255, 0, 0, 0), 2.0f);
 
     graphics.DrawLine(&pen, WINDOW_PADDING, coordinatesZeroY, MAIN_WINDOW_W - WINDOW_PADDING, coordinatesZeroY);
     graphics.DrawLine(&pen, coordinatesZeroX, MAIN_WINDOW_H - WINDOW_PADDING, coordinatesZeroX, WINDOW_PADDING);
 
     // Draw Points
-    SolidBrush brush(Color(255, 255, 0, 0));
-
-    for (int j = 0; j < i; j++)
+    for (int j = 0; j < FIBO_MAX; j++)
     {
-        int x = coordinatesZeroX + j;
-        int y = coordinatesZeroY - (j < 3 ? j : cache[j]);
-        int x2 = x + j;
-        int y2;
+        int x = coordinatesZeroX + (j * xOffset);
+        int y = 0;
+        Status status;
 
-        if (j > 0 && j < 3)
+        if (j == 0 || cache[j] != 0)
         {
-            y2 = y - j;
-        }
-        else if (j > 0)
-        {
-            y2 = cache[j - 1];
-        }
-        else
-        {
-            y2 = y;
+            y = coordinatesZeroY - cache[j];
+
+            status = drawPoint(graphics, x, y);
+
+            cout << "Point drawn at [" << x << ", " << y << "]"
+                 << " Status: " << status << endl;
         }
 
-        graphics.DrawLine(&pen, i, i, i, i);
-
-        graphics.DrawLine(&pen, x, y, x2, y2);
-        // drawPoint(&brush, graphics, x, y);
+        if (j == i)
+        {
+            Pen pen2(Color(255, 0, 0, 255));
+            graphics.DrawEllipse(&pen2, x - 10, y - 10, 20, 20);
+        }
     }
+
+    cout << endl
+         << endl;
 }
